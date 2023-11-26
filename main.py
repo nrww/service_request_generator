@@ -70,10 +70,10 @@ def generateUsers(n):
                 'phone': gen_phone(),
                 "login": firstName + '_' + lastName ,
                 'password': lastName + str(random.randint(1, 9998))}
-        usersDict[_ + 1] = data1
         response = requests.post(url, params=data1)
-        if 'inserted' in response.text:
+        if 'inserted_id' in response.text:
             printProgressBar(_ + 1, n, prefix = 'Progress:', suffix = 'Complete', length = 50)
+            usersDict[response.json()['inserted_id']] = data1
         else:  
             print(response.text)
 
@@ -89,12 +89,12 @@ def generateServices(n):
                 "type": serviceName,
                 "desc": 'Красочное описание услуги',
                 'price': random.randint(0,100000),
-                "author_id": random.randint(1,n)
+                "author_id": random.choice(list(usersDict.keys()))
                 }
-        servicesDict[_ + 1] = data1
         response = requests.post(url, params=data1)
-        if 'created' in response.text:
+        if 'inserted_id' in response.text:
             printProgressBar(_ + 1, n, prefix = 'Progress:', suffix = 'Complete', length = 50)
+            servicesDict[response.json()['inserted_id']] = data1
         else:  
             print(response.text)
             
@@ -108,16 +108,16 @@ def generateOrders(n):
     for _ in range(n):
         status = random.choice(status_list)
         
-        data1 = {"client_id": random.randint(1,n),
-                "service_id": random.randint(1,n),
+        data1 = {"client_id": random.choice(list(usersDict.keys())),
+                "service_id": random.choice(list(servicesDict.keys())),
                 "status": status,
                 "content": 'очень важная информация по заказу'
                 }
 
-        ordersDict[_ + 1] = data1
         response = requests.post(url, params=data1)
-        if 'created' in response.text:
+        if 'inserted_id' in response.text:
             printProgressBar(_ + 1, n, prefix = 'Progress:', suffix = 'Complete', length = 50)
+            ordersDict[response.json()['inserted_id']] = data1
         else:  
             print(response.text)
             
@@ -132,24 +132,73 @@ def generateMessage(n):
     
     for _ in range(n):
         
-        order_id = random.randint(1,n)
-        sender_list = [ordersDict[order_id]['client_id'], random.randint(1,n)]
+        order_id = random.choice(list(ordersDict.keys()))
+        sender_list = [ordersDict[order_id]['client_id'], servicesDict[ordersDict[order_id]['service_id']]["author_id"]]
         for __ in range(10):
             
             data1 = {"order_id": order_id,
                     "sender_id": random.choice(sender_list),
                     "text": random.choice(text_list),
                     }
-            messagesDict[_ * 10 + __ + 1] = data1
             response = requests.post(url, params=data1)
-            if 'created' in response.text:
-                printProgressBar(_ * 10 + __ + 1 , n*10, prefix = 'Progress:', suffix = 'Complete', length = 50)
+            if 'inserted_id' in response.text:
+                printProgressBar(_*10 + __+1 , n*10, prefix = 'Progress:', suffix = 'Complete', length = 50)
+                messagesDict[response.json()['inserted_id']] = data1
             else:  
                 print(response.text)
     
     
+def check_user():
+    
+    url = 'http://localhost:8081/user'
+    for key, value in usersDict.items():
+        params = {'id': key}
+        response = requests.get(url, params=params)
+        for k, i in response.json().items():
+            if k != 'user_id' and k != 'password':
+                if not value[k] == i:
+                    print(response.json())
+                    print(value)
+                    return False
+    return True
+
+def check_services():
+    
+    url = 'http://localhost:8082/service'
+    for key, value in servicesDict.items():
+        params = {'id': key}
+        response = requests.get(url, params=params)
+        for k, i in response.json().items():
+            if k != 'id' and k!= 'date':
+                if not value[k] == i:
+                    if k == 'price':
+                        if  float(value[k]) != float(i):
+                            return False
+                        else: 
+                            continue
+                    print(response.json())
+                    print(value)
+                    print(k)
+                    return False
+    return True
+
+def check_orders():
+    
+    url = 'http://localhost:8083/order'
+    for key, value in ordersDict.items():
+        params = {'id': key}
+        response = requests.get(url, params=params)
+        for k, i in response.json().items():
+            if k != 'id' and k!= 'date':
+                if not value[k] == i:
+                    print(response.json())
+                    print(value)
+                    print(k)
+                    return False
+    return True
     
     
+
 if __name__ == "__main__":
     
     nRows = int(input('Введите кол-во добавляемых записей: '))
@@ -158,3 +207,8 @@ if __name__ == "__main__":
     generateServices(nRows)
     generateOrders(nRows)
     generateMessage(nRows)
+    
+    if check_user() and check_services() and check_orders():
+        print('PASS')
+    else:
+        print('FAILED')
